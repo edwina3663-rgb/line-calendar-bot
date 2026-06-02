@@ -1,26 +1,24 @@
 const { google } = require('googleapis');
 
-function getGoogleClient() {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    'https://developers.google.com/oauthplayground'
-  );
-  oauth2Client.setCredentials({
-    refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-  });
-  return oauth2Client;
-}
-
 async function addGoogleCalendarEvent(event) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REFRESH_TOKEN) {
     return { success: false, reason: 'not_configured' };
   }
 
   try {
-    const auth = getGoogleClient();
-    await auth.getAccessToken();
-    const calendar = google.calendar({ version: 'v3', auth });
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+    });
+
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const result = await calendar.events.insert({
       calendarId: 'primary',

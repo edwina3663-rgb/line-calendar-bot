@@ -32,14 +32,21 @@ async function parseCalendarEvent(userMessage) {
 - 只回傳 JSON，不要有任何其他文字`;
 
   const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/ gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    'https://api.groq.com/openai/v1/chat/completions',
     {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1 }
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      }
     }
   );
 
-  const text = response.data.candidates[0].content.parts[0].text.trim();
+  const text = response.data.choices[0].message.content.trim();
   const clean = text.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
 }

@@ -31,37 +31,22 @@ async function parseCalendarEvent(userMessage) {
 - 今天、明天、後天、下週等相對時間要根據現在時間計算
 - 只回傳 JSON，不要有任何其他文字`;
 
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  // 同時嘗試兩種認證方式
-  let response;
-  try {
-    // 方式一：key 放在 header（適合 AQ. 開頭的 key）
-    response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1 }
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey
-        }
+  const response = await axios.post(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
       }
-    );
-  } catch (err) {
-    // 方式二：key 放在 URL query string
-    response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1 }
-      }
-    );
-  }
+    }
+  );
 
-  const text = response.data.candidates[0].content.parts[0].text.trim();
+  const text = response.data.choices[0].message.content.trim();
   const clean = text.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
 }

@@ -19,6 +19,7 @@ async function addGoogleCalendarEvent(event) {
 
   try {
     const auth = getGoogleClient();
+    await auth.getAccessToken();
     const calendar = google.calendar({ version: 'v3', auth });
 
     const result = await calendar.events.insert({
@@ -35,6 +36,7 @@ async function addGoogleCalendarEvent(event) {
     return { success: true, link: result.data.htmlLink };
   } catch (err) {
     console.error('Google Calendar 錯誤:', err.message);
+    console.error('錯誤詳情:', JSON.stringify(err.response?.data || {}));
     return { success: false, reason: err.message };
   }
 }

@@ -32,7 +32,7 @@ async function parseCalendarEvent(userMessage) {
 - 只回傳 JSON，不要有任何其他文字`;
 
   const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/ gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.1 }

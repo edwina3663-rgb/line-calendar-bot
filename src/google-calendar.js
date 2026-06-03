@@ -1,25 +1,25 @@
 const { google } = require('googleapis');
 
+function getGoogleClient() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+  });
+  return oauth2Client;
+}
+
 async function addGoogleCalendarEvent(event) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REFRESH_TOKEN) {
     return { success: false, reason: 'not_configured' };
   }
-
   try {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
-    
-    oauth2Client.setCredentials({
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-    });
-
-    const { credentials } = await oauth2Client.refreshAccessToken();
-    oauth2Client.setCredentials(credentials);
-
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
+    const auth = getGoogleClient();
+    const { credentials } = await auth.refreshAccessToken();
+    auth.setCredentials(credentials);
+    const calendar = google.calendar({ version: 'v3', auth });
     const result = await calendar.events.insert({
       calendarId: 'primary',
       resource: {
@@ -30,7 +30,6 @@ async function addGoogleCalendarEvent(event) {
         end: { dateTime: event.endTime, timeZone: 'Asia/Taipei' }
       }
     });
-
     return { success: true, link: result.data.htmlLink };
   } catch (err) {
     console.error('Google Calendar 錯誤:', err.message);
@@ -39,4 +38,66 @@ async function addGoogleCalendarEvent(event) {
   }
 }
 
-module.exports = { addGoogleCalendarEvent };
+async function getWeekEvents() {
+  try {
+    const auth = getGoogleClient();
+    const { credentials } = await auth.refreshAccessToken();
+    auth.setCredentials(credentials);
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const result = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: monday.toISOString(),
+      timeMax: sunday.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      timeZone: 'Asia/Taipei'
+    });
+
+    return result.data.items || [];
+  } catch (err) {
+    console.error('查詢行程錯誤:', err.message);
+    return [];
+  }
+}
+
+async function getTodayEvents(daysOffset = 0) {
+  try {
+    const auth = getGoogleClient();
+    const { credentials } = await auth.refreshAccessToken();
+    auth.setCredentials(credentials);
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const date = new Date();
+    date.setDate(date.getDate() + daysOffset);
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+
+    const result = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      timeZone: 'Asia/Taipei'
+    });
+
+    return result.data.items || [];
+  } catch (err) {
+    console.error('查詢行程錯誤:', err.message);
+    return [];
+  }
+}
+
+module.exports = { addGoogleCalendarEvent, getWeekEvents, getTodayEvents };

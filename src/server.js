@@ -3,14 +3,14 @@ const express = require('express');
 const crypto = require('crypto');
 const axios = require('axios');
 const { parseCalendarEvent } = require('./nlp');
-const { addGoogleCalendarEvent } = require('./google-calendar');
-const { addTimeTreeEvent } = require('./timetree');
+const { addGoogleCalendarEvent, getWeekEvents, getTodayEvents } = require('./google-calendar');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET || '';
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+const NOTIFY_USER_IDS = (process.env.NOTIFY_USER_IDS || '').split(',').filter(Boolean);
 
 // 健康檢查
 app.get('/', (req, res) => {
@@ -45,6 +45,58 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
   }
 });
 
+// 每日提醒 endpoint（由 UptimeRobot 或外部 cron 呼叫）
+app.get('/remind', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== process.env.REMIND_SECRET) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  try {
+    const events = await getTodayEvents(1); // 取明天的活動
+    if (events.length === 0) {
+      return res.json({ status: 'ok', message: '明天沒有行程' });
+    }
+
+    let msg = '📅 明天的行程提醒：\n\n';
+    for (const e of events) {
+      const start = new Date(e.start.dateTime || e.start.date);
+      const timeStr = e.start.dateTime
+        ? start.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit' })
+        : '整天';
+      msg += `📌 ${e.summary}\n🕐 ${timeStr}\n`;
+      if (e.location) msg += `📍 ${e.location}\n`;
+      msg += '\n';
+    }
+
+    // 傳給所有通知對象
+    for (const userId of NOTIFY_USER_IDS) {
+      await pushMessage(userId, msg.trim());
+    }
+
+    res.json({ status: 'ok', sent: NOTIFY_USER_IDS.length });
+  } catch (err) {
+    console.error('提醒錯誤:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function pushMessage(userId, text) {
+  await axios.post(
+    'https://api.line.me/v2/bot/message/push',
+    {
+      to: userId,
+      messages: [{ type: 'text', text }]
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      }
+    }
+  );
+}
+
 async function replyMessage(replyToken, text) {
   await axios.post(
     'https://api.line.me/v2/bot/message/reply',
@@ -62,16 +114,83 @@ async function replyMessage(replyToken, text) {
 }
 
 async function handleMessage(event) {
-  const userText = event.message.text;
+  const userText = event.message.text.trim();
   const replyToken = event.replyToken;
 
   console.log(`收到訊息：${userText}`);
 
   try {
+    // 查詢這週行程
+    if (userText.includes('這週行程') || userText.includes('本週行程') || userText.includes('這周行程')) {
+      const events = await getWeekEvents();
+      if (events.length === 0) {
+        await replyMessage(replyToken, '📅 這週沒有行程');
+        return;
+      }
+      let msg = '📅 這週行程：\n\n';
+      for (const e of events) {
+        const start = new Date(e.start.dateTime || e.start.date);
+        const dateStr = start.toLocaleDateString('zh-TW', {
+          timeZone: 'Asia/Taipei', month: 'long', day: 'numeric', weekday: 'short'
+        });
+        const timeStr = e.start.dateTime
+          ? start.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit' })
+          : '整天';
+        msg += `📌 ${e.summary}\n📅 ${dateStr} ${timeStr}\n`;
+        if (e.location) msg += `📍 ${e.location}\n`;
+        msg += '\n';
+      }
+      await replyMessage(replyToken, msg.trim());
+      return;
+    }
+
+    // 查詢今天行程
+    if (userText.includes('今天行程') || userText.includes('今日行程')) {
+      const events = await getTodayEvents(0);
+      if (events.length === 0) {
+        await replyMessage(replyToken, '📅 今天沒有行程');
+        return;
+      }
+      let msg = '📅 今天行程：\n\n';
+      for (const e of events) {
+        const start = new Date(e.start.dateTime || e.start.date);
+        const timeStr = e.start.dateTime
+          ? start.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit' })
+          : '整天';
+        msg += `📌 ${e.summary}\n🕐 ${timeStr}\n`;
+        if (e.location) msg += `📍 ${e.location}\n`;
+        msg += '\n';
+      }
+      await replyMessage(replyToken, msg.trim());
+      return;
+    }
+
+    // 查詢明天行程
+    if (userText.includes('明天行程') || userText.includes('明日行程')) {
+      const events = await getTodayEvents(1);
+      if (events.length === 0) {
+        await replyMessage(replyToken, '📅 明天沒有行程');
+        return;
+      }
+      let msg = '📅 明天行程：\n\n';
+      for (const e of events) {
+        const start = new Date(e.start.dateTime || e.start.date);
+        const timeStr = e.start.dateTime
+          ? start.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit' })
+          : '整天';
+        msg += `📌 ${e.summary}\n🕐 ${timeStr}\n`;
+        if (e.location) msg += `📍 ${e.location}\n`;
+        msg += '\n';
+      }
+      await replyMessage(replyToken, msg.trim());
+      return;
+    }
+
+    // 新增活動
     const parsed = await parseCalendarEvent(userText);
 
     if (!parsed.isCalendarEvent) {
-      await replyMessage(replyToken, parsed.reply || '你好！你可以跟我說「幫我加入明天下午三點開會」來新增行事曆活動 📅');
+      await replyMessage(replyToken, parsed.reply || '你好！你可以：\n📅 新增活動：「幫我加入明天下午三點開會」\n🔍 查詢行程：「這週行程」、「今天行程」、「明天行程」');
       return;
     }
 
@@ -87,17 +206,9 @@ async function handleMessage(event) {
       timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit'
     });
 
-    const [googleResult, timetreeResult] = await Promise.all([
-      addGoogleCalendarEvent(parsed),
-      addTimeTreeEvent(parsed)
-    ]);
+    const googleResult = await addGoogleCalendarEvent(parsed);
 
-    let calendarStatus = '';
-    if (googleResult.success) calendarStatus += '📆 Google 行事曆 ✅\n';
-    else if (googleResult.reason !== 'not_configured') calendarStatus += '📆 Google 行事曆 ❌\n';
-    if (timetreeResult.success) calendarStatus += '🌲 TimeTree ✅\n';
-    else if (timetreeResult.reason !== 'not_configured') calendarStatus += '🌲 TimeTree ❌\n';
-    if (!calendarStatus) calendarStatus = '（行事曆尚未設定，活動已解析成功）\n';
+    let calendarStatus = googleResult.success ? '📆 Google 行事曆 ✅' : '📆 Google 行事曆 ❌';
 
     let replyText = `✅ 已新增活動！\n\n`;
     replyText += `📌 ${parsed.title}\n`;

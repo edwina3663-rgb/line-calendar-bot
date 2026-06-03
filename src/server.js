@@ -152,7 +152,8 @@ async function handleMessage(event) {
     }
 
     // ── 單純輸入「新增活動」→ 進入對話流程 ──
-    if (userText === '新增活動' || userText === '➕ 新增活動' || userText === '幫我新增活動') {
+    const addKeywords = ['新增活動', '新增', '加入活動', '➕ 新增活動', '幫我新增活動', '幫我加入', '新增行程', '加入行程'];
+    if (addKeywords.includes(userText)) {
       userState[userId] = { step: 'waiting_content' };
       await replyMessage(replyToken, '請說明活動內容 📝\n\n例如：\n• 「7/6-7/10 墾丁旅遊」\n• 「明天下午三點牙醫回診」\n• 「下週五晚上七點聚餐」\n\n傳「取消」可以離開');
       return;

@@ -8,14 +8,27 @@ async function parseCalendarEvent(userMessage) {
 使用者說：「${userMessage}」
 
 請判斷這是不是要新增行事曆活動的請求。
-如果是，請回傳 JSON 格式（不要有其他文字，不要加markdown）：
+
+如果是單天含時間的活動，回傳：
 {
   "isCalendarEvent": true,
+  "allDay": false,
   "title": "活動標題",
-  "startTime": "2024-01-15T14:00:00+08:00",
-  "endTime": "2024-01-15T15:00:00+08:00",
-  "description": "備註（若無則空字串）",
-  "location": "地點（若無則空字串）"
+  "startTime": "2026-07-06T14:00:00+08:00",
+  "endTime": "2026-07-06T15:00:00+08:00",
+  "description": "",
+  "location": ""
+}
+
+如果是單天全天或跨天活動（例如「7/6-7/10 墾丁旅遊」、「明天整天」），回傳：
+{
+  "isCalendarEvent": true,
+  "allDay": true,
+  "title": "活動標題",
+  "startTime": "2026-07-06",
+  "endTime": "2026-07-10",
+  "description": "",
+  "location": ""
 }
 
 如果不是新增活動的請求，回傳：
@@ -25,11 +38,12 @@ async function parseCalendarEvent(userMessage) {
 }
 
 注意：
-- 時間格式必須是 ISO 8601，時區 +08:00
-- 若使用者沒說結束時間，預設加 1 小時
-- 若只說日期沒說時間，預設整天（00:00 到 23:59）
-- 今天、明天、後天、下週等相對時間要根據現在時間計算
-- 只回傳 JSON，不要有任何其他文字`;
+- 只回傳 JSON，不要有任何其他文字或 markdown
+- 時間格式：有時間用 ISO 8601 含 +08:00；全天/跨天用 YYYY-MM-DD
+- 沒說結束時間預設加 1 小時
+- 今天、明天、後天、下週等要根據現在時間計算
+- 跨天活動 endTime 是最後一天（包含）
+- location 預設空字串，不要猜測`;
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',

@@ -5,9 +5,7 @@ function getGoogleClient() {
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET
   );
-  oauth2Client.setCredentials({
-    refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-  });
+  oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
   return oauth2Client;
 }
 
@@ -20,16 +18,31 @@ async function addGoogleCalendarEvent(event) {
     const { credentials } = await auth.refreshAccessToken();
     auth.setCredentials(credentials);
     const calendar = google.calendar({ version: 'v3', auth });
-    const result = await calendar.events.insert({
-      calendarId: 'primary',
-      resource: {
+
+    let resource;
+    if (event.allDay) {
+      // 全天或跨天活動
+      const endDate = new Date(event.endTime + 'T00:00:00+08:00');
+      endDate.setDate(endDate.getDate() + 1); // Google Calendar 全天活動結束日需 +1
+      const endStr = endDate.toISOString().split('T')[0];
+      resource = {
+        summary: event.title,
+        description: event.description || '',
+        location: event.location || '',
+        start: { date: event.startTime },
+        end: { date: endStr }
+      };
+    } else {
+      resource = {
         summary: event.title,
         description: event.description || '',
         location: event.location || '',
         start: { dateTime: event.startTime, timeZone: 'Asia/Taipei' },
         end: { dateTime: event.endTime, timeZone: 'Asia/Taipei' }
-      }
-    });
+      };
+    }
+
+    const result = await calendar.events.insert({ calendarId: 'primary', resource });
     return { success: true, link: result.data.htmlLink };
   } catch (err) {
     console.error('Google Calendar 錯誤:', err.message);
@@ -44,7 +57,6 @@ async function getWeekEvents() {
     const { credentials } = await auth.refreshAccessToken();
     auth.setCredentials(credentials);
     const calendar = google.calendar({ version: 'v3', auth });
-
     const now = new Date();
     const day = now.getDay();
     const monday = new Date(now);
@@ -53,16 +65,10 @@ async function getWeekEvents() {
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
-
     const result = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: monday.toISOString(),
-      timeMax: sunday.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      timeZone: 'Asia/Taipei'
+      calendarId: 'primary', timeMin: monday.toISOString(), timeMax: sunday.toISOString(),
+      singleEvents: true, orderBy: 'startTime', timeZone: 'Asia/Taipei'
     });
-
     return result.data.items || [];
   } catch (err) {
     console.error('查詢行程錯誤:', err.message);
@@ -76,23 +82,14 @@ async function getTodayEvents(daysOffset = 0) {
     const { credentials } = await auth.refreshAccessToken();
     auth.setCredentials(credentials);
     const calendar = google.calendar({ version: 'v3', auth });
-
     const date = new Date();
     date.setDate(date.getDate() + daysOffset);
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
-
+    const start = new Date(date); start.setHours(0, 0, 0, 0);
+    const end = new Date(date); end.setHours(23, 59, 59, 999);
     const result = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      timeZone: 'Asia/Taipei'
+      calendarId: 'primary', timeMin: start.toISOString(), timeMax: end.toISOString(),
+      singleEvents: true, orderBy: 'startTime', timeZone: 'Asia/Taipei'
     });
-
     return result.data.items || [];
   } catch (err) {
     console.error('查詢行程錯誤:', err.message);

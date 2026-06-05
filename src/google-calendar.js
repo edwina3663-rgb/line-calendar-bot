@@ -9,6 +9,15 @@ function getGoogleClient() {
   return oauth2Client;
 }
 
+function addOneDayToDate(dateStr) {
+  // YYYY-MM-DD 格式加一天
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d + 1);
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${mm}-${dd}`;
+}
+
 async function addGoogleCalendarEvent(event) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REFRESH_TOKEN) {
     return { success: false, reason: 'not_configured' };
@@ -21,16 +30,14 @@ async function addGoogleCalendarEvent(event) {
 
     let resource;
     if (event.allDay) {
-      // 全天或跨天活動
-      const endDate = new Date(event.endTime + 'T00:00:00+08:00');
-      endDate.setDate(endDate.getDate() + 1); // Google Calendar 全天活動結束日需 +1
-      const endStr = endDate.toISOString().split('T')[0];
+      // Google Calendar 全天活動：end date 是不包含的（exclusive）
+      // 所以 7/6-7/10 要設 end = 7/11
       resource = {
         summary: event.title,
         description: event.description || '',
         location: event.location || '',
         start: { date: event.startTime },
-        end: { date: endStr }
+        end: { date: addOneDayToDate(event.endTime) }
       };
     } else {
       resource = {
